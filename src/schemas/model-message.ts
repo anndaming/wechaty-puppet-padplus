@@ -167,3 +167,43 @@ export interface PadplusMediaData {
   status: string,
   thumb: string,
 }
+
+export interface PadplusUploadFileData {
+  status: number,
+  url: string,
+}
+
+export interface PadplusRecallData {
+  BaseResponse: {
+    Ret: number,
+    ErrMsg: string,
+  },
+}
+
+export interface VideoContent {
+  cdnthumbheight: number,
+  cdnthumbwidth: number,
+  playlength: number,
+  thumb: string,
+  url: string,
+}
+
+export interface MiniProgramParamsPayload {
+  aeskey: string,
+  appid: string,
+  cdnthumbaeskey: string,
+  cdnthumbheight: number,
+  cdnthumblength: number,
+  cdnthumburl: string,
+  cdnthumbwidth: number,
+  description: string,
+  pagepath: string,
+  sourcedisplayname: string,
+  sourceusername: string,
+  title: string,
+  type: number,
+  url: string,
+  username: string,
+  version: string,
+  weappiconurl: string,
+}

@@ -3,6 +3,7 @@ import { xmlToJson } from './xml-to-json'
 import {
   PadplusMessagePayload,
   PadplusRoomInviteEvent,
+  RoomInviteEvent,
 }                         from '../schemas'
 import { isPayload } from './is-type'
 
@@ -77,7 +78,7 @@ export const roomInviteEventMessageParser = async (
     return null
   }
 
-  const { content, msgId, createTime, fromUserName } = rawPayload
+  const { content, msgId, createTime, fromUserName, toUserName } = rawPayload
   const tryXmlText = content.replace(/^[^\n]+\n/, '')
   interface XmlSchema {
     msg: {
@@ -138,11 +139,15 @@ export const roomInviteEventMessageParser = async (
     return null
   }
 
-  return {
+  const roomInviteEvent: RoomInviteEvent = {
     fromUser: fromUserName,
     msgId,
+    receiver: toUserName,
     roomName: matchInviteEvent![2],
+    thumbUrl: jsonPayload.msg.appmsg.thumburl,
     timestamp: createTime,
     url: jsonPayload.msg.appmsg.url,
   }
+
+  return roomInviteEvent
 }

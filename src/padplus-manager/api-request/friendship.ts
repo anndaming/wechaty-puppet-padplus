@@ -12,12 +12,12 @@ export class PadplusFriendship {
     this.requestClient = requestClient
   }
 
-  // Set alias for contact
-  public confirmFriendship = async (encryptUserName: string, ticket: string): Promise<boolean> => {
-    log.verbose(PRE, `setAlias()`)
+  // confirm friendship
+  public confirmFriendship = async (encryptUserName: string, ticket: string, scene: string): Promise<boolean> => {
+    log.verbose(PRE, `confirmFriendship()`)
 
     const data = {
-      type: 3,
+      type: scene,
       userName: encryptUserName,
       verifyUserTicket: ticket,
     }
@@ -48,12 +48,17 @@ export class PadplusFriendship {
     if (result) {
       const addFriendStr = result.getData()
       if (addFriendStr) {
-        return JSON.parse(addFriendStr)
+        const addFriend = JSON.parse(addFriendStr)
+        if (addFriend && addFriend.status !== '0') {
+          throw new Error(`Can not add friend, status: ${addFriend.status}, reason: ${addFriend.message || 'unknow'}`)
+        } else {
+          return addFriend
+        }
       } else {
-        throw new Error(`can not parse data`)
+        throw new Error(`addFriend can not parse data`)
       }
     } else {
-      throw new Error(`can not get callback result`)
+      throw new Error(`can not get callback result of ADD_CONTACT`)
     }
   }
 

@@ -1,7 +1,7 @@
 import grpc from 'grpc'
 import util from 'util'
 import { v4 as uuid } from 'uuid'
-import { log, padplusToken } from '../config'
+import { log, padplusToken, GRPC_LIMITATION } from '../config'
 
 import { PadPlusServerClient } from './proto-ts/PadPlusServer_grpc_pb' // add proto file from Gao
 import { CallbackPool } from '../utils/callbackHelper'
@@ -18,6 +18,7 @@ import { EventEmitter } from 'events'
 import { GrpcEventEmitter } from './grpc-event-emitter'
 import { DebounceQueue, ThrottleQueue } from 'rx-queue'
 import { Subscription } from 'rxjs'
+import { ApiTypeDic, ResponseTypeDic } from '../utils/util'
 
 export interface ResultObject {
   code: number,
@@ -25,7 +26,16 @@ export interface ResultObject {
 }
 
 const PRE = 'GRPC_GATEWAY'
+
+const NO_LOG_API_LIST: ResponseType[] = [
+  ResponseType.LOGIN_QRCODE,
+  ResponseType.ROOM_QRCODE,
+  ResponseType.CONTACT_SELF_QRCODE_GET,
+  ResponseType.LOGIN_DEVICE_INFO,
+]
+
 const NEED_CALLBACK_API_LIST: ApiType[] = [
+  ApiType.INIT,
   ApiType.SEND_MESSAGE,
   ApiType.SEND_FILE,
   ApiType.GET_MESSAGE_MEDIA,
@@ -35,7 +45,20 @@ const NEED_CALLBACK_API_LIST: ApiType[] = [
   ApiType.GET_ROOM_ANNOUNCEMENT,
   ApiType.SET_ROOM_ANNOUNCEMENT,
   ApiType.HEARTBEAT,
+  ApiType.CREATE_TAG,
+  ApiType.ADD_TAG,
+  ApiType.MODIFY_TAG,
+  ApiType.DELETE_TAG,
+  ApiType.GET_ALL_TAG,
   ApiType.GET_ROOM_QRCODE,
+  ApiType.GET_CONTACT_SELF_QRCODE,
+  ApiType.SET_CONTACT_SELF_INFO,
+  ApiType.GET_CONTACT_SELF_INFO,
+  ApiType.LOGOUT,
+  ApiType.REVOKE_MESSAGE,
+  ApiType.ACCEPT_ROOM_INVITATION,
+  ApiType.LOGIN_DEVICE,
+  ApiType.UPLOAD_FILE,
 ]
 
 export type GrpcGatewayEvent = 'data' | 'reconnect' | 'grpc-end' | 'grpc-close' | 'heartbeat'
@@ -60,6 +83,8 @@ export class GrpcGateway extends EventEmitter {
     endpoint: string,
     name: string,
   ): Promise<GrpcEventEmitter> {
+    log.silly(PRE, `init()`)
+
     if (!this._instance) {
       const instance = new GrpcGateway(token, endpoint)
       await instance.initSelf()
@@ -83,7 +108,7 @@ export class GrpcGateway extends EventEmitter {
         throw new Error(`no heartbeat response from grpc server`)
       }
     } catch (error) {
-      log.error(`can not get heartbeat from grpc server`, error)
+      log.error(PRE, `can not get heartbeat from grpc server`, error)
       Object.values(this.eventEmitterMap).map(emitter => {
         emitter.emit('reconnect')
       })
@@ -111,7 +136,7 @@ export class GrpcGateway extends EventEmitter {
   ) {
     super()
     this.stopping = false
-    this.client = new PadPlusServerClient(this.endpoint, grpc.credentials.createInsecure())
+    this.client = new PadPlusServerClient(this.endpoint, grpc.credentials.createInsecure(), GRPC_LIMITATION)
     this.isAlive = false
     this.reconnectStatus = true
     this.timeoutNumber = 0
@@ -119,6 +144,8 @@ export class GrpcGateway extends EventEmitter {
   }
 
   private async initSelf () {
+    log.silly(PRE, `initSelf()`)
+
     this.debounceQueue = new DebounceQueue(30 * 1000)
     this.debounceQueueSubscription = this.debounceQueue.subscribe(async () => {
       try {
@@ -201,7 +228,7 @@ export class GrpcGateway extends EventEmitter {
   public async request (apiType: ApiType, uin: string, data?: any): Promise<StreamResponse | null> {
     const request = new RequestObject()
     const requestId = uuid()
-    log.silly(PRE, `GRPC Request ApiType: ${apiType}`)
+    log.silly(PRE, `GRPC Request ApiType: ${ApiTypeDic[apiType]}`)
     request.setToken(this.token)
     if (uin !== '') {
       request.setUin(uin)
@@ -215,12 +242,12 @@ export class GrpcGateway extends EventEmitter {
     try {
       const result = await this._request(request)
       if (result && NEED_CALLBACK_API_LIST.includes(apiType)) {
-        // TODO: add timeout for differ ApiType
-        return new Promise<StreamResponse>((resolve, reject) => {
-          let timeoutMs = 5 * 1000
+        return new Promise(resolve => {
+          let timeoutMs = 30 * 1000
           switch (apiType) {
             case ApiType.SEND_MESSAGE:
             case ApiType.SEND_FILE:
+            case ApiType.GET_CONTACT_SELF_INFO:
               timeoutMs = 3 * 60 * 1000
               break
             case ApiType.GET_MESSAGE_MEDIA:
@@ -233,14 +260,15 @@ export class GrpcGateway extends EventEmitter {
               timeoutMs = 1 * 60 * 1000
               break
             default:
-              timeoutMs = 5 * 1000
+              timeoutMs = 30 * 1000
               break
           }
           const timeout = setTimeout(async () => {
             if (apiType !== ApiType.HEARTBEAT) {
               await this.checkTimeout(uin)
             }
-            reject(new Error(`ApiType: ${apiType} request timeout, traceId: ${traceId}`))
+            log.error(PRE, `ApiType: ${ApiTypeDic[apiType]} request timeout, traceId: ${traceId}`)
+            resolve(null)
           }, timeoutMs)
           CallbackPool.Instance.pushCallbackToPool(traceId, (data: StreamResponse) => {
             const _traceId = data.getTraceid()
@@ -258,9 +286,9 @@ export class GrpcGateway extends EventEmitter {
         })
       }
     } catch (err) {
+      log.silly(PRE, `GRPC Request ApiType: ${ApiTypeDic[apiType]} catch error.`)
       await new Promise(resolve => setTimeout(resolve, 5000))
       this.isAlive = false
-      this.client.close()
       Object.values(this.eventEmitterMap).map(emitter => {
         emitter.emit('reconnect')
       })
@@ -333,6 +361,7 @@ export class GrpcGateway extends EventEmitter {
 
   public async initGrpcGateway () {
     log.silly(PRE, `initGrpcGateway()`)
+
     const initConfig = new InitConfig()
     initConfig.setToken(this.token)
 
@@ -367,6 +396,7 @@ export class GrpcGateway extends EventEmitter {
       =====================================================================
       `)
       if (err.code === 14 || err.code === 13 || err.code === 2) {
+        log.info(PRE, `Failed to reconnect grpc server, error code : ${err.code}, detail info : ${JSON.stringify(err)}, try to reconnect 5 seconds later.`)
         await new Promise(resolve => setTimeout(resolve, 5000))
         this.isAlive = false
         Object.values(this.eventEmitterMap).map(emitter => {
@@ -386,7 +416,6 @@ export class GrpcGateway extends EventEmitter {
         await new Promise(resolve => setTimeout(resolve, 5000))
         this.isAlive = false
         if (!this.stopping) {
-          log.silly(PRE, `run here`)
           Object.values(this.eventEmitterMap).map(emitter => {
             emitter.emit('reconnect')
           })
@@ -396,6 +425,7 @@ export class GrpcGateway extends EventEmitter {
         =====================================================================
                    DUPLICATE CONNECTED, THIS THREAD WILL EXIT NOW
         =====================================================================
+        See: https://github.com/wechaty/wechaty-puppet-padplus/issues/169
         `)
         process.exit()
       }
@@ -410,9 +440,9 @@ export class GrpcGateway extends EventEmitter {
     stream.on('data', async (data: StreamResponse) => {
       const traceId = data.getTraceid()
       const responseType = data.getResponsetype()
-      if (responseType !== ResponseType.LOGIN_QRCODE && responseType !== ResponseType.ROOM_QRCODE) {
+      if (responseType && !NO_LOG_API_LIST.includes(responseType)) {
         log.silly(`==P==A==D==P==L==U==S==<GRPC DATA>==P==A==D==P==L==U==S==`)
-        log.silly(PRE, `responseType: ${responseType}, data : ${data.getData()}`)
+        log.silly(PRE, `responseType: ${ResponseTypeDic[responseType]}, data : ${data.getData()}`)
         log.silly(`==P==A==D==P==L==U==S==<GRPC DATA>==P==A==D==P==L==U==S==\n`)
       }
       if (this.debounceQueue && this.throttleQueue) {
@@ -425,7 +455,7 @@ export class GrpcGateway extends EventEmitter {
         try {
           message = JSON.parse(_data).message
         } catch (error) {
-          log.error(`can not parse data`)
+          log.error(PRE, `The grpc data is not JSON format, can not parse it.`)
         }
       }
       if (message && message === 'Another instance connected, disconnected the current one.') {

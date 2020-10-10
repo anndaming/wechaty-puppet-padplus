@@ -4,50 +4,138 @@
 [![NPM Version](https://badge.fury.io/js/wechaty-puppet-padplus.svg)](https://www.npmjs.com/package/wechaty-puppet-padplus)
 [![npm (tag)](https://img.shields.io/npm/v/wechaty-puppet-padplus/next.svg)](https://www.npmjs.com/package/wechaty-puppet-padplus?activeTab=versions)
 [![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-blue.svg)](https://www.typescriptlang.org/)
-[![Linux/Mac Build Status](https://travis-ci.com/botorange/wechaty-puppet-padplus.svg?branch=master)](https://travis-ci.com/botorange/wechaty-puppet-padplus)
+[![Linux/Mac Build Status](https://travis-ci.com/wechaty/wechaty-puppet-padplus.svg?branch=master)](https://travis-ci.com/wechaty/wechaty-puppet-padplus) 
 
 ## Notice
 
-1. Wechaty-puppet-padplus is still in very Early Alpha Stage, please make sure you have the necessary engineering technics to deal with the bugs instead of just asking for support.
-2. You are welcome to file an issue to reproduce the problem, if it is reproducible, we will fix that as soon as possible.
-3. If you need a stable version, please keep waiting until we release the stable one.
+Our Mission: Make it easy to build a WeChat Chatbot for developers.
+
+We provide a **free** token for the developers who have a strong will and ability to build a valuable chatbot for users.
+
+See more: [Token Support](https://github.com/juzibot/Welcome/wiki/Support-Developers), [Everything about wechaty](https://github.com/juzibot/Welcome/wiki/Everything-about-Wechaty)
 
 ## Install
 
 ### 1. Init
 
-```js
-mkdir padplus
+#### 1.1. Check your `Node` version first
 
-npm init
+```shell
+node --version // v10.16.0
 ```
 
-### 2. Install the latest wechaty
+> for windows system
 
-```js
-npm install wechaty
+To make sure you could install `wechaty-puppet-padplus` successfully, you have to start PowerShell as Administrator and run these commands:
+
+```shell
+npm install -g windows-build-tools
+
+npm install -g node-gyp
 ```
 
-### 3. Install wechaty-puppet-padplus
+#### 1.2. Create your bot folder and do some init config
 
-> Notice: wechaty-puppet-padplus still in alpha test period, so we keep updating the package, you should install the latest packge by using `@latest` until we release the stable package.
+```shell
+mkdir my-padplus-bot && cd my-padplus-bot
 
-```js
+npm init -y
+
+npm install ts-node typescript -g
+
+tsc --init --target ES6
+
+touch bot.ts // copy the example code to it
+```
+
+### 2. Install Wechaty Dependencies
+
+```shell
+npm install wechaty@latest
+
 npm install wechaty-puppet-padplus@latest
 ```
 
-### 4. Install other dependency
+Or some new features developing version:
 
-```js
+```shell
+npm install wechaty@next
+
+npm install wechaty-puppet-padplus@next
+```
+
+### 3. Install Other Dependencies
+
+> There's no need to install `wechaty-puppet` in my-padplus-bot
+
+```shell
 npm install qrcode-terminal
+...
+```
+
+### 4. Run
+
+> If you want to see detail logs about your bot, just run:
+
+```shell
+BROLOG_LEVEL=silly ts-node bot.ts
+```
+
+or
+
+```shell
+BROLOG_LEVEL=silly node bot.js
+```
+
+
+### 5. Cache Option
+
+> wechaty-puppet-padplus use flash-store or mongo as cache store
+
+- flash-store[default]
+- mongo
+
+> If you want to use mongo as cache sotre, just set the cacheOption, like this:
+
+```ts
+const puppet: Puppet = new PuppetPadplus({
+  token,
+  cacheOption: {
+    type: 'mongo',
+    url: 'mongodb://127.0.0.1:27017/testdb',
+  },
+})
+
+```
+
+#### Caution
+
+*When you use mongo as cache store, wechaty-puppet-cache use some tables which have `wechaty-cache` prefix. [detail>>](https://www.npmjs.com/package/wechaty-puppet-cache#4-caution)*
+
+### 6. Other Tips
+
+> Set environment in windows
+
+```shell
+$Env:BROLOG_LEVEL='silly'
+ts-node bot.ts
+```
+
+> If step 1~3 can not help you install successfully, please try this suggestion, otherwise just skip it please.
+
+```shell
+rm -rf node_modules package-lock.json
+npm install
 ```
 
 ## Example
 
-```js
-import { Wechaty       } from 'wechaty'
+```ts
+// bot.ts
+import { Contact, Message, Wechaty } from 'wechaty'
+import { ScanStatus } from 'wechaty-puppet'
 import { PuppetPadplus } from 'wechaty-puppet-padplus'
-import { generate      } from 'qrcode-terminal'
+import QrcodeTerminal from 'qrcode-terminal'
 
 const token = 'your-token'
 
@@ -63,18 +151,34 @@ const bot = new Wechaty({
 })
 
 bot
-  .on('scan', (qrcode) => {
-    generate(qrcode, {
-      small: true
-    })
+  .on('scan', (qrcode, status) => {
+    if (status === ScanStatus.Waiting) {
+      QrcodeTerminal.generate(qrcode, {
+        small: true
+      })
+    }
   })
-  .on('message', msg => {
+  .on('login', (user: Contact) => {
+    console.log(`login success, user: ${user}`)
+  })
+  .on('message', (msg: Message) => {
     console.log(`msg : ${msg}`)
+  })
+  .on('logout', (user: Contact, reason: string) => {
+    console.log(`logout user: ${user}, reason : ${reason}`)
   })
   .start()
 ```
 
-## Puppet Comparision
+## How to emit the message that you sent
+
+Please use environment variable `PADPLUS_REPLAY_MESSAGE` to activate this function.
+
+```shell
+PADPLUS_REPLAY_MESSAGE=true node bot.js
+```
+
+## Puppet Comparison
 
 功能 | padpro | padplus | macpro
 ---|---|---|---
@@ -84,9 +188,9 @@ bot
  收发图文链接| ✅ |✅ |✅
  发送图片、文件| ✅ | ✅（对内容有大小限制，20M以下） |✅
  接收图片、文件| ✅ | ✅（对内容有大小限制，25M以下） |✅
- 发送视频| ✅ | ✅（视频以链接形式发送） | ✅
+ 发送视频| ✅ | ✅ | ✅
  接收视频| ✅ | ✅ | ✅
- 发送小程序| ❌ | ❌ | ✅
+ 发送小程序| ❌ | ✅ | ✅
  接收动图| ❌ | ✅ | ✅
  发送动图| ❌ | ✅ | ✅
  接收语音消息| ✅ | ✅ | ✅
@@ -98,7 +202,7 @@ bot
  转发视频| ✅ | ✅ | ✅
  转发文件| ✅ | ✅ | ✅
  转发动图| ❌ | ❌ | ❌
- 转发小程序| ❌ | ❌ | ❌
+ 转发小程序| ❌ | ✅ | ❌
  **<群组>**|  |  |
  创建群聊|✅|✅|✅
  设置群公告|✅|✅|✅
@@ -125,6 +229,6 @@ bot
  **<其他>**|  |  |
  登录微信|✅|✅|✅
  扫码状态|✅|✅|❌
- 退出微信|✅|❌|✅
+ 退出微信|✅|✅|✅
  依赖协议|iPad|iPad|Mac|
 

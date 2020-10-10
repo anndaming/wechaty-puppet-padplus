@@ -1,16 +1,16 @@
 import {
-  PuppetRoomLeaveEvent,
-  YOU,
-}                         from 'wechaty-puppet'
-
-import {
   PadplusMessagePayload,
+  RoomLeaveEvent,
+  RoomRelatedXmlSchema,
 }                         from '../schemas'
 
 import {
   isPayload,
   isRoomId,
 }               from './is-type'
+import { YOU } from 'wechaty-puppet'
+import { xmlToJson } from './xml-to-json'
+import { getUserName } from './get-xml-label'
 
 /**
  *
@@ -37,17 +37,33 @@ const ROOM_LEAVE_BOT_REGEX_LIST = [
   /^(你)被"([^"]+?)"移出群聊/,
 ]
 
-export function roomLeaveEventMessageParser (
+export async function roomLeaveEventMessageParser (
   rawPayload: PadplusMessagePayload,
-): null | PuppetRoomLeaveEvent {
+): Promise<null | RoomLeaveEvent> {
 
   if (!isPayload(rawPayload)) {
     return null
   }
 
   const roomId  = rawPayload.fromUserName
-  const content = rawPayload.content
   const timestamp = rawPayload.createTime
+
+  let content = rawPayload.content
+  if (!content) {
+    return null
+  }
+  let linkList
+
+  let needParseXML = content.includes('移出群聊') || content.includes('You were removed from the group chat by')
+  if (!needParseXML) {
+    const tryXmlText = content.replace(/^[^\n]+\n/, '')
+    const jsonPayload: RoomRelatedXmlSchema = await xmlToJson(tryXmlText) // toJson(tryXmlText, { object: true }) as RoomRelatedXmlSchema
+    if (!jsonPayload || !jsonPayload.sysmsg || jsonPayload.sysmsg.$.type !== 'sysmsgtemplate') {
+      return null
+    }
+    content = jsonPayload.sysmsg.sysmsgtemplate.content_template.template
+    linkList = jsonPayload.sysmsg.sysmsgtemplate.content_template.link_list.link
+  }
 
   if (!roomId) {
     return null
@@ -75,22 +91,23 @@ export function roomLeaveEventMessageParser (
     return null
   }
 
-  let leaverName  : undefined | string | YOU
-  let removerName : undefined | string | YOU
+  let leaverId  : string | YOU
+  let removerId : string | YOU
 
   if (matchesForOther) {
-    removerName = YOU
-    leaverName  = matchesForOther[2]
+    removerId = YOU
+    const leaverName  = matchesForOther[2]
+    leaverId  = getUserName([linkList], leaverName)
   } else if (matchesForBot) {
-    removerName = matchesForBot[2]
-    leaverName  = YOU
+    removerId = matchesForBot[2]
+    leaverId  = YOU
   } else {
     throw new Error('for typescript type checking, will never go here')
   }
 
-  const roomLeaveEvent: PuppetRoomLeaveEvent = {
-    leaverNameList  : [leaverName],
-    removerName,
+  const roomLeaveEvent: RoomLeaveEvent = {
+    leaverIdList  : [leaverId],
+    removerId,
     roomId,
     timestamp,
   }

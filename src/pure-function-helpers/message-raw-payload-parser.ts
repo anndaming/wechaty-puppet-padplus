@@ -19,15 +19,13 @@ import { recalledPayloadParser } from './message-recalled-payload-parser'
 import { messageSourceParser } from './message-source-parser'
 import { messageType } from './message-type'
 import { log } from '../config'
-// import { xmlToJson } from './xml-to-json'
+import { quotePayloadParser } from './message-quote-payload-parser'
 
 const PRE = 'messageRawPayloadParser'
 
 export async function messageRawPayloadParser (
   rawPayload: PadplusMessagePayload,
 ): Promise<MessagePayload> {
-
-  // console.log('messageRawPayloadParser:', rawPayload)
 
   /**
    * 0. Set Message Type
@@ -37,7 +35,7 @@ export async function messageRawPayloadParser (
 
   const payloadBase = {
     id        : rawPayload.msgId,
-    timestamp : rawPayload.createTime / 1000,   // Padplus message timestamp is seconds
+    timestamp : rawPayload.createTime,
     type,
   } as {
     id        : string,
@@ -65,7 +63,7 @@ export async function messageRawPayloadParser (
 
   let text:   undefined | string
 
-  let mentionIdList: undefined | string[]
+  let mentionIdList: string[] = []
 
   /**
    * 1. Set Room Id
@@ -135,7 +133,7 @@ export async function messageRawPayloadParser (
     const recalledPayload = await recalledPayloadParser(rawPayload)
     const pattern = [
       /"(.+)" 撤回了一条消息/,
-      /"(.+)" has recalled a message./,
+      /"(.+)" recalled a message/,
     ]
     const patternSelf = [
       /你撤回了一条消息/,
@@ -182,19 +180,16 @@ export async function messageRawPayloadParser (
   if (roomId) {
     const messageSource = await messageSourceParser(rawPayload.msgSource)
     if (messageSource !== null && messageSource.atUserList) {
-      mentionIdList = messageSource.atUserList
+      mentionIdList = messageSource.atUserList || []
     }
   }
 
   /**
-   * 6. Set Contact for ShareCard
+   * 7. Set text for quote message
    */
-  /* if (type === MessageType.Contact) {
-    const xml = await xmlToJson(rawPayload.content.split('\n')[1])
-    log.silly(PRE, `xml : ${JSON.stringify(xml)}`)
-    const shareCardData = xml.msg.$
-    text = JSON.stringify(shareCardData)
-  } */
+  if (rawPayload.appMsgType === WechatAppMessageType.QuoteMessage) {
+    text = await quotePayloadParser(rawPayload)
+  }
 
   let payload: MessagePayload
 
@@ -249,13 +244,21 @@ export async function messageRawPayloadParser (
           payload.type = MessageType.MiniProgram
           break
         case WechatAppMessageType.RedEnvelopes:
+          payload.type = MessageType.RedEnvelope
+          break
         case WechatAppMessageType.Transfers:
-          payload.type = MessageType.Money
+          payload.type = MessageType.Transfer
           break
         case WechatAppMessageType.RealtimeShareLocation:
           payload.type = MessageType.Location
           break
-
+        case WechatAppMessageType.GroupNote:
+          payload.type = MessageType.GroupNote
+          payload.text = appPayload.title
+          break
+        case WechatAppMessageType.QuoteMessage:
+          payload.type = MessageType.Text
+          break
         default:
           payload.type = MessageType.Unknown
           break

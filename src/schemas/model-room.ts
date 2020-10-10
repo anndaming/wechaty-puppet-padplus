@@ -1,3 +1,4 @@
+/* eslint camelcase: 0 */
 export interface PadplusRoomMemberPayload {
   contactId: string,
   nickName: string,
@@ -13,12 +14,13 @@ export interface PadplusMemberBrief {
 }
 
 export interface GrpcRoomMemberPayload {
-  UserName: string,
-  HeadImgUrl: string,
   DisplayName: string,
-  RemarkName: string,
+  HeadImgUrl: string,
+  InvitedBy: string,
+  MemberContactFlag: number,
   NickName: string,
-  isOwner?: string,
+  RemarkName: string,
+  UserName: string,
 }
 
 export interface GrpcRoomMemberList {
@@ -34,13 +36,12 @@ export interface PadplusRoomPayload {
   contactType    : number,
   stranger       : string,
   members        : PadplusMemberBrief[],
-  labelLists     : string,
+  tagList        : string,
   nickName       : string,
   smallHeadUrl   : string,
   ticket         : string,
   chatroomId     : string,
   memberCount    : number,
-  isDelete?      : boolean,
 }
 
 export interface GrpcRoomPayload {
@@ -80,7 +81,9 @@ export interface GrpcRoomPayload {
 export interface PadplusRoomInvitationPayload {
   id       : string,
   fromUser : string,
+  receiver : string,
   roomName : string,
+  thumbUrl : string,
   timestamp: number,
   url      : string,
 }
@@ -88,8 +91,10 @@ export interface PadplusRoomInvitationPayload {
 export interface PadplusRoomInviteEvent {
   fromUser: string,
   msgId: string,
+  receiver: string,
   roomName: string,
   timestamp: number,
+  thumbUrl: string,
   url: string,
 }
 
@@ -121,4 +126,54 @@ export interface GrpcSetAnnouncementData {
 
 export interface PadplusRoomMemberMap {
   [contactId: string]: PadplusRoomMemberPayload
+}
+
+export interface GrpcAccpetRoomInvitation {
+  chatRoomType: string,
+  cmdid: string,
+  inviteDetailUrl: string,
+  inviteFrom: string,
+  inviteUrl: string,
+  loginer: string,
+  queueName: string,
+  source: string,
+  uin: string,
+  userName: string,
+}
+
+export interface RoomRelatedXmlSchema {
+  sysmsg: {
+    $: {
+      type: string,
+    },
+    sysmsgtemplate: {
+      content_template: {
+        $: {
+          type: string,
+        },
+        plain: string,
+        template: string,
+        link_list: {
+          link: [{
+            $: {
+              name: string,
+              type: string,
+              hidden?: string,
+            },
+            memberlist?: {
+              member: [{
+                username: string,
+                nickname: string,
+              }]
+            },
+            separator?: string,
+            title?: string,
+            usernamelist?: {
+              username: string
+            }
+          }]
+        }
+      }
+    }
+  }
 }

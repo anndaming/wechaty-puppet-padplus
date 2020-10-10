@@ -103,7 +103,7 @@ export interface GrpcRoomRawPayload {
   encryptUsername: string,
   extInfo        : string,
   extInfoExt     : string,
-  labelLists     : string,
+  tagList     : string,
   msgType        : PadplusMessageType,
   nickName       : string,
   smallHeadImgUrl: string,
@@ -184,6 +184,31 @@ export interface GrpcGetCdnDnsPayload {
     aesKey: string,
   },
   clientVersion: number,
+}
+
+export interface GrpcLoginDeviceInfo {
+  loginer: string,
+  uin: string,
+  userName: string,
+  nickName: string,
+  headImgUrl: string,
+  wechatUserId: string,
+  deviceInfo: any,
+  token: string,
+  loginType: string,
+  childId: string,
+}
+
+export interface LoginDeviceInfo {
+  uin: string,
+  userName: string,
+  nickName: string,
+  headImgUrl: string,
+  wechatUserId: string,
+  deviceName: string,
+  token: string,
+  loginType: string,
+  childId: string,
 }
 
 export enum GRPC_CODE {
